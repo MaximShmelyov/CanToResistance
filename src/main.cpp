@@ -18,10 +18,18 @@ MCP2515 mcp2515(MCP2515_SPI_CS_PIN);
 
 
 bool swcPressed = false;
-__u8 mediaSource = 0x00;;
+__u8 mediaSource = 0x00;
+
+void setResistance(uint16_t targetOhms);
+void sendSWCPressToPioneer(__u8 key);
+void sendUnpressToPioneer();
 
 void setup() {
   Serial.begin(115200);
+  while (!Serial) {
+    delay(1000);
+    // Serial.println("Waiting for Serial...");
+  }
 
   mcp2515.reset();
   mcp2515.setBitrate(CAN_33KBPS);
@@ -156,17 +164,16 @@ void sendSWCPressToPioneer(__u8 key) {
   setResistance(resistance);
 }
 
-
 void sendUnpressToPioneer() {
   Serial.println("Pioneer: emulate unpress");
-  uint16_t resistance = 71000; // ~71kΩ (high impedance)
+  uint16_t resistance = 10000; // ~10kΩ (high impedance)
   setResistance(resistance);
 }
 
 void setResistance(uint16_t targetOhms) {
   const int maxOhms = 10000; // For example, MCP4131-104 (10k)
   const int steps = 128;     // 7-bit potentiometer
-  byte position = map(targetOhms, 0, maxOhms, 0, steps - 1);
+  // long position = map(targetOhms, 0, maxOhms, 0, steps - 1);
 
   // digitalWrite(CS_PIN, LOW);
   // SPI.transfer(0x00);     // write command
