@@ -4,9 +4,11 @@
 
 struct can_frame canMsg;
 
-const int SWC_ADDR = 0x10438040;
+const __u32 SWC_ADDR = 0x10438040;
+const __u32 CD400_ADDR = 0x10AD6080;
+
 const int MCP2515_SPI_CS_PIN = 10;
-// const int INT_PIN = 2;
+const int INT_PIN = 2;
 
 MCP2515 mcp2515(MCP2515_SPI_CS_PIN);
 int mediaSource = -1;
@@ -45,27 +47,35 @@ void loop() {
         switch (canMsg.data[0]) {
           case 0x00:
             Serial.println("Unpress (All)");
+            // @TODO
             break;
           case 0x01:
             Serial.println("Vol Up");
+            // @TODO: Implement volume up functionality
             break;
           case 0x02:
             Serial.println("Vol Down");
+            // @TODO: Implement volume down functionality
             break;
           case 0x03:
             Serial.println("Next");
+            // @TODO: Implement next track functionality
             break;
           case 0x04:
             Serial.println("Prev");
+            // @TODO: Implement previous track functionality
             break;
           case 0x05:
             Serial.println("SRC");
+            // @TODO: Implement source change functionality
             break;
           case 0x06:
             Serial.println("Phone up / Voice");
+            // @TODO: Implement phone up / voice functionality
             break;
           case 0x07:
             Serial.println("Mute / Phone down");
+            // @TODO: Implement mute / phone down functionality
             break;
           default:
             Serial.println("Unknown key");
@@ -73,7 +83,6 @@ void loop() {
       } else {
         Serial.println("Invalid key send message format");
       }
-      // Add your logic here for handling the key send message
     }
   }
 }
