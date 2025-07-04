@@ -7,13 +7,18 @@ struct can_frame canMsg;
 const __u32 SWC_ADDR = 0x10438040;
 const __u32 CD400_ADDR = 0x10AD6080;
 
+const __u8 SOURCE_CHANGED_ID = 0x00;
+const __u8 SOURCE_AUX = 0x08;
+const __u8 CD400_MEDIA_KEY = 0x03;
+
 const int MCP2515_SPI_CS_PIN = 10;
 const int INT_PIN = 2;
 
 MCP2515 mcp2515(MCP2515_SPI_CS_PIN);
 
-// 0x08 = AUX
-int mediaSource = -1;
+
+bool swcPressed = false;
+__u8 mediaSource = 0x00;;
 
 void setup() {
   Serial.begin(115200);
@@ -28,7 +33,7 @@ void setup() {
 
 void loop() {
   if (mcp2515.readMessage(&canMsg) == MCP2515::ERROR_OK) {
-    Serial.print(canMsg.can_id, HEX);
+  Serial.print(canMsg.can_id, HEX);
     Serial.print(" ");
     Serial.print(canMsg.can_dlc, HEX);
     Serial.print(" ");
@@ -40,72 +45,135 @@ void loop() {
 
     Serial.println();
 
-    // Media source change detection
-    if (canMsg.can_id == CD400_ADDR && canMsg.data[0] == 0x00 && canMsg.data[1] == 0x12) {
+    __u32 id = canMsg.can_id;
+    // Source change (CD400)
+    if (id == CD400_ADDR && canMsg.data[0] == SOURCE_CHANGED_ID && canMsg.data[1] == 0x12) {
+      __u8 prevMediaSource = mediaSource;
       mediaSource = canMsg.data[2];
-      Serial.print("Active media source changed to: ");
+      Serial.print("Source: ");
       Serial.println(mediaSource, HEX);
-    }
 
-    // SWC
-    if (canMsg.can_id == SWC_ADDR && canMsg.can_dlc == 1 && mediaSource == 0x08) {
-      uint8_t key = canMsg.data[0];
-      Serial.print("SWC Key: ");
-      Serial.println(key, HEX);
-
-      switch (key) {
-        case 0x00:
-          Serial.println("Unpress (All)");
-          break;
-        case 0x01:
-          Serial.println("Vol Up");
-          break;
-        case 0x02:
-          Serial.println("Vol Down");
-          break;
-        case 0x03:
-          Serial.println("Next");
-          break;
-        case 0x04:
-          Serial.println("Prev");
-          break;
-        case 0x05:
-          Serial.println("SRC");
-          break;
-        case 0x06:
-          Serial.println("Phone up / Voice");
-          break;
-        case 0x07:
-          Serial.println("Mute / Phone down");
-          break;
-        default:
-          Serial.println("Unknown SWC key");
+      // If the source changed from AUX to something else, release SWC
+      if (prevMediaSource == SOURCE_AUX && mediaSource != SOURCE_AUX && swcPressed) {
+        Serial.println("Source changed. Forcing SWC release.");
+        swcPressed = false;
+        sendUnpressToPioneer(); // emulate unpress
       }
     }
 
-    // CD400 panel key processing
-    if (canMsg.can_id == CD400_ADDR && canMsg.data[0] == 0x03 && mediaSource == 0x08) {
-      uint8_t key = canMsg.data[2];
-      uint8_t pressState = canMsg.data[7];
+    // SWC Buttons
+    if (id == SWC_ADDR && canMsg.can_dlc == 1) {
+      __u8 key = canMsg.data[0];
 
-      if (pressState == 0x00) { // Only on press
-        Serial.print("CD400 Panel Key Pressed: ");
-        Serial.println(key, HEX);
-
-        switch (key) {
-          case 0x13:
-            Serial.println("Next (CD400)");
-            break;
-          case 0x19:
-            Serial.println("Prev (CD400)");
-            break;
-          case 0x18:
-            Serial.println("Play/Pause (CD400)");
-            break;
-          default:
-            Serial.println("Unknown CD400 panel key");
+      if (key == 0x00) {
+        // Release is always processed
+        if (swcPressed) {
+          Serial.println("SWC released (Unpress All)");
+          swcPressed = false;
+          sendUnpressToPioneer();
         }
+      }
+      // Press when AUX is active
+      else if (mediaSource == SOURCE_AUX) {
+        swcPressed = true;
+        Serial.print("SWC Key pressed: ");
+        Serial.println(key, HEX);
+        sendSWCPressToPioneer(key);
+      }
+    }
+
+    if (id == CD400_ADDR && canMsg.data[0] == CD400_MEDIA_KEY && mediaSource == SOURCE_AUX) {
+      __u8 key = canMsg.data[2];
+      __u8 state = canMsg.data[7];
+
+      // Press
+      if (state == 0x00) {
+        Serial.print("CD400 Panel Key: ");
+        Serial.println(key, HEX);
+        sendSWCPressToPioneer(key);
+        swcPressed = true;
+      } 
+      // Release
+      else /*if (state == 0x01 || state == 0x02)*/ {
+        Serial.println("CD400 Panel Key released");
+        sendUnpressToPioneer();
+        swcPressed = false;
       }
     }
   }
+}
+
+void sendSWCPressToPioneer(__u8 key) {
+  uint16_t resistance = 0;
+
+  switch (key) {
+    case 0x01: // Vol Up
+      resistance = 2100; // ~2.1kΩ
+      Serial.println("Emulate: Vol Up");
+      break;
+
+    case 0x02: // Vol Down
+      resistance = 3100; // ~3.1kΩ
+      Serial.println("Emulate: Vol Down");
+      break;
+
+    case 0x03: // Next
+    case 0x13: // CD400 Next
+      resistance = 740; // ~0.74kΩ
+      Serial.println("Emulate: Next Track");
+      break;
+
+    case 0x04: // Prev
+    case 0x19: // CD400 Prev
+      resistance = 1300; // ~1.3kΩ
+      Serial.println("Emulate: Prev Track");
+      break;
+
+    // case 0x05: // SRC
+    //   resistance = 270; // ~270Ω
+    //   Serial.println("Emulate: Source");
+    //   break;
+
+    case 0x06: // Phone Up / Voice
+      resistance = 4600; // ~4.6kΩ
+      Serial.println("Emulate: Voice");
+      break;
+
+    case 0x18: // CD400 Play/Pause
+      resistance = 4600; // ~4.6kΩ @TODO: find Play/Pause value
+      Serial.println("Emulate: CD400 Play/Pause");
+      break;
+
+    // case 0x07: // Mute
+    //   resistance = 8600; // ~8.6kΩ
+    //   Serial.println("Emulate: Mute / Phone Down");
+    //   break;
+
+    default:
+      Serial.println("Unknown key, no action");
+      return;
+  }
+  setResistance(resistance);
+}
+
+
+void sendUnpressToPioneer() {
+  Serial.println("Pioneer: emulate unpress");
+  uint16_t resistance = 71000; // ~71kΩ (high impedance)
+  setResistance(resistance);
+}
+
+void setResistance(uint16_t targetOhms) {
+  const int maxOhms = 10000; // For example, MCP4131-104 (10k)
+  const int steps = 128;     // 7-bit potentiometer
+  byte position = map(targetOhms, 0, maxOhms, 0, steps - 1);
+
+  // digitalWrite(CS_PIN, LOW);
+  // SPI.transfer(0x00);     // write command
+  // SPI.transfer(position); // wiper step
+  // digitalWrite(CS_PIN, HIGH);
+
+  Serial.print("Resistance set to ~");
+  Serial.print(targetOhms);
+  Serial.println(" ohms");
 }
