@@ -4,8 +4,8 @@
 
 struct can_frame canMsg;
 
-const __u32 SWC_ADDR = 0x10438040;
-const __u32 CD400_ADDR = 0x10AD6080;
+const __u32 SWC_ADDR = /*0x90438040; */ 0x10438040;
+const __u32 CD400_ADDR = /*0x90AD6080;*/ 0x10AD6080;
 
 const __u8 SOURCE_CHANGED_ID = 0x00;
 const __u8 SOURCE_AUX = 0x08;
@@ -41,21 +41,38 @@ void setup() {
 
 void loop() {
   if (mcp2515.readMessage(&canMsg) == MCP2515::ERROR_OK) {
-  Serial.print(canMsg.can_id, HEX);
-    Serial.print(" ");
-    Serial.print(canMsg.can_dlc, HEX);
-    Serial.print(" ");
+  // Serial.print(canMsg.can_id, HEX);
+    // Serial.print(" ");
+    // Serial.print(canMsg.can_dlc, HEX);
+    // Serial.print(" ");
 
-    for (int i = 0; i < canMsg.can_dlc; i++) {
-      Serial.print(canMsg.data[i], HEX);
-      Serial.print(" ");
+    // for (int i = 0; i < canMsg.can_dlc; i++) {
+    //   Serial.print(canMsg.data[i], HEX);
+    //   Serial.print(" ");
+    // }
+
+    // Serial.println();
+
+    if (false){//canMsg.can_dlc == 8) {
+      Serial.print("ID ");
+      Serial.print(canMsg.can_id, HEX);
+      Serial.print(" DLC ");
+      Serial.print(canMsg.can_dlc, HEX);
+      Serial.print(" DLC: ");
+
+      for (int i = 0; i < canMsg.can_dlc; i++) {
+        Serial.print(canMsg.data[i], HEX);
+        Serial.print(" ");
+      }
+
+      Serial.println();
     }
 
-    Serial.println();
-
     __u32 id = canMsg.can_id;
+    // Serial.print(id);
+    // Serial.println();
     // Source change (CD400)
-    if (id == CD400_ADDR && canMsg.data[0] == SOURCE_CHANGED_ID && canMsg.data[1] == 0x12) {
+    if ((id & CD400_ADDR) == CD400_ADDR && canMsg.data[0] == SOURCE_CHANGED_ID && canMsg.data[1] == 0x12) {
       __u8 prevMediaSource = mediaSource;
       mediaSource = canMsg.data[2];
       Serial.print("Source: ");
@@ -70,9 +87,11 @@ void loop() {
     }
 
     // SWC Buttons
-    if (id == SWC_ADDR && canMsg.can_dlc == 1) {
+    if ((id & SWC_ADDR) == SWC_ADDR && canMsg.can_dlc == 1) {
       __u8 key = canMsg.data[0];
-
+      // Serial.println("Got SWC");
+      // Serial.print("SWC Key: ");
+      // Serial.println(key, HEX);
       if (key == 0x00) {
         // Release is always processed
         if (swcPressed) {
@@ -90,7 +109,7 @@ void loop() {
       }
     }
 
-    if (id == CD400_ADDR && canMsg.data[0] == CD400_MEDIA_KEY && mediaSource == SOURCE_AUX) {
+    if ((id & CD400_ADDR) == CD400_ADDR && canMsg.data[0] == CD400_MEDIA_KEY && mediaSource == SOURCE_AUX) {
       __u8 key = canMsg.data[2];
       __u8 state = canMsg.data[7];
 
