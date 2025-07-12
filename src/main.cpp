@@ -4,23 +4,34 @@
 
 struct can_frame canMsg;
 
+// CAN bus addresses
 const __u32 SWC_ADDR = /*0x90438040; */ 0x10438040;
 const __u32 CD400_ADDR = /*0x90AD6080;*/ 0x10AD6080;
-
 const __u8 SOURCE_CHANGED_ID = 0x00;
 const __u8 SOURCE_AUX = 0x08;
 const __u8 CD400_MEDIA_KEY = 0x03;
 
+// MCP2515 configuration
 const int MCP2515_SPI_CS_PIN = 10;
 const int INT_PIN = 2;
 
-MCP2515 mcp2515(MCP2515_SPI_CS_PIN);
-
-
+// SWC and Media Source states
 bool swcPressed = false;
 __u8 mediaSource = 0x00;
 
-void setResistance(uint16_t targetOhms);
+// Initialize MCP2515 CAN controller
+MCP2515 mcp2515(MCP2515_SPI_CS_PIN);
+
+// MCP42100 Potentiometer control
+const int MCP42100_CS_PIN   = 6;
+const int MCP42100_MOSI_PIN = 11;
+const int MCP42100_SCK_PIN  = 9;
+byte addressPot0 =     0b00010001;      //To define potentiometer use last two BITS 01= POT 0
+byte addressPot1 =     0b00010010;      //To define potentiometer use last two BITS 10= POT 1
+byte addressPot0and1 = 0b00010011;  //To define potentiometer use last two BITS 10= POT 0 and 1
+
+void setResistance(byte address, uint32_t targetOhms);
+void digitalPotWrite(byte value, byte address);
 void sendSWCPressToPioneer(__u8 key);
 void sendUnpressToPioneer();
 
@@ -34,6 +45,15 @@ void setup() {
   mcp2515.reset();
   mcp2515.setBitrate(CAN_33KBPS);
   mcp2515.setNormalMode();
+
+  // Setup up MCP42100
+  pinMode(MCP42100_CS_PIN, OUTPUT);
+  pinMode(MCP42100_MOSI_PIN, OUTPUT);
+  pinMode(MCP42100_SCK_PIN, OUTPUT);
+  digitalWrite(MCP42100_CS_PIN, HIGH);
+  digitalWrite(MCP42100_SCK_PIN, LOW); // SPI Mode 0: SCK начинается с LOW
+
+  sendUnpressToPioneer(); // Start with unpressed state
 
   Serial.println("------- CAN Read ----------");
   Serial.println("ID  DLC   DATA");
@@ -53,20 +73,20 @@ void loop() {
 
     // Serial.println();
 
-    if (false){//canMsg.can_dlc == 8) {
-      Serial.print("ID ");
-      Serial.print(canMsg.can_id, HEX);
-      Serial.print(" DLC ");
-      Serial.print(canMsg.can_dlc, HEX);
-      Serial.print(" DLC: ");
+    // if (false){//canMsg.can_dlc == 8) {
+    //   Serial.print("ID ");
+    //   Serial.print(canMsg.can_id, HEX);
+    //   Serial.print(" DLC ");
+    //   Serial.print(canMsg.can_dlc, HEX);
+    //   Serial.print(" DLC: ");
 
-      for (int i = 0; i < canMsg.can_dlc; i++) {
-        Serial.print(canMsg.data[i], HEX);
-        Serial.print(" ");
-      }
+    //   for (int i = 0; i < canMsg.can_dlc; i++) {
+    //     Serial.print(canMsg.data[i], HEX);
+    //     Serial.print(" ");
+    //   }
 
-      Serial.println();
-    }
+    //   Serial.println();
+    // }
 
     __u32 id = canMsg.can_id;
     // Serial.print(id);
@@ -131,7 +151,7 @@ void loop() {
 }
 
 void sendSWCPressToPioneer(__u8 key) {
-  uint16_t resistance = 0;
+  uint32_t resistance = 100000; // Default high impedance (~100kΩ)
 
   switch (key) {
     case 0x01: // Vol Up
@@ -180,26 +200,50 @@ void sendSWCPressToPioneer(__u8 key) {
       Serial.println("Unknown key, no action");
       return;
   }
-  setResistance(resistance);
+  setResistance(addressPot0, resistance);
 }
 
 void sendUnpressToPioneer() {
   Serial.println("Pioneer: emulate unpress");
-  uint16_t resistance = 10000; // ~10kΩ (high impedance)
-  setResistance(resistance);
+  uint32_t resistance = 100000; // ~100kΩ (high impedance)
+  setResistance(addressPot0and1, resistance);
+  setResistance(addressPot0, resistance);
+  setResistance(addressPot1, resistance);
 }
 
-void setResistance(uint16_t targetOhms) {
-  const int maxOhms = 10000; // For example, MCP4131-104 (10k)
-  const int steps = 128;     // 7-bit potentiometer
-  // long position = map(targetOhms, 0, maxOhms, 0, steps - 1);
+void setResistance(byte address, uint32_t targetOhms) {
+  const uint32_t maxOhms = 100000; // For MCP42100 (100k)
+  const int steps = 255;      // 8-bit resolution
 
-  // digitalWrite(CS_PIN, LOW);
-  // SPI.transfer(0x00);     // write command
-  // SPI.transfer(position); // wiper step
-  // digitalWrite(CS_PIN, HIGH);
+  int position = constrain((long)(targetOhms) * steps / maxOhms, 0, 255);
+
+  digitalPotWrite(position, address);
 
   Serial.print("Resistance set to ~");
-  Serial.print(targetOhms);
+  Serial.print((long)position * maxOhms / steps);
   Serial.println(" ohms");
+}
+
+
+void spiTransfer(byte value);
+// MCP42100 SPI transfer function
+void digitalPotWrite(byte value, byte address)
+{
+  Serial.print("Writing value: ");
+  Serial.print(value);
+  Serial.print(" to address: ");
+  Serial.println(address);
+  digitalWrite(MCP42100_CS_PIN, LOW); //Set Chip Active
+  spiTransfer(address);
+  spiTransfer(value);
+  digitalWrite(MCP42100_CS_PIN, HIGH); //Set Chip Inactive
+}
+
+void spiTransfer(byte value) {
+  for (int i = 7; i >= 0; i--) {
+    digitalWrite(MCP42100_MOSI_PIN, (value >> i) & 0x01); // Set bit
+    digitalWrite(MCP42100_SCK_PIN, HIGH);                // Set clock high
+    delayMicroseconds(1);                       // Short delay
+    digitalWrite(MCP42100_SCK_PIN, LOW);                 // Set clock low
+  }
 }
