@@ -215,7 +215,7 @@ void setResistance(byte address, uint32_t targetOhms) {
   const uint32_t maxOhms = 100000; // For MCP42100 (100k)
   const int steps = 255;      // 8-bit resolution
 
-  int position = constrain((long)(targetOhms) * steps / maxOhms, 0, 255);
+  int position = constrain((long)targetOhms * steps / maxOhms, 0, 255);
 
   digitalPotWrite(position, address);
 
