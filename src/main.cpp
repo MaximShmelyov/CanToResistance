@@ -14,7 +14,7 @@ const __u8 CD400_MEDIA_KEY = 0x03;
 
 // MCP2515 configuration
 const int MCP2515_SPI_CS_PIN = 10;
-const int INT_PIN = 2;
+const uint8_t INT_PIN = A0;
 
 // SWC and Media Source states
 bool swcPressed = false;

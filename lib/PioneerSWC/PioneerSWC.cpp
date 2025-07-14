@@ -45,13 +45,13 @@ void PioneerSWC::spiTransfer(uint8_t value) {
 
 uint8_t PioneerSWC::getValueForCommand(SWCCommand command) {
   switch (command) {
-    case SWCCommand::Source:     return 2;
-    case SWCCommand::Mute:       return 7;
-    case SWCCommand::DisplayOff: return 15;
-    case SWCCommand::Next:       return 21;
-    case SWCCommand::Prev:       return 30;
-    case SWCCommand::VolUp:      return 40;
-    case SWCCommand::VolDown:    return 61;
+    case SWCCommand::Source:     return 0;
+    case SWCCommand::Mute:       return 4;
+    case SWCCommand::DisplayOff: return 11;
+    case SWCCommand::Next:       return 16; // 14 - 19
+    case SWCCommand::Prev:       return 24; // 20 - 28
+    case SWCCommand::VolUp:      return 35; // 29 - 41
+    case SWCCommand::VolDown:    return 52; // 42 - 65
     case SWCCommand::None:       return 0;
   }
   return 0;
@@ -67,5 +67,5 @@ void PioneerSWC::press(SWCCommand command) {
 
 void PioneerSWC::release() {
   Serial.print("PioneerSWC::release()");
-  setPot(0);
+  setPot(255);
 }
