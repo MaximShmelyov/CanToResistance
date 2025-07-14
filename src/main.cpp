@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <SPI.h>
 #include <mcp2515.h>
+#include "PioneerSWC.h"
 
 struct can_frame canMsg;
 
@@ -23,15 +24,11 @@ __u8 mediaSource = 0x00;
 MCP2515 mcp2515(MCP2515_SPI_CS_PIN);
 
 // MCP42100 Potentiometer control
-const int MCP42100_CS_PIN   = 6;
-const int MCP42100_MOSI_PIN = 11;
-const int MCP42100_SCK_PIN  = 9;
-byte addressPot0 =     0b00010001;      //To define potentiometer use last two BITS 01= POT 0
-byte addressPot1 =     0b00010010;      //To define potentiometer use last two BITS 10= POT 1
-byte addressPot0and1 = 0b00010011;  //To define potentiometer use last two BITS 10= POT 0 and 1
+const uint8_t MCP41100_CS_PIN   = 6;
+const uint8_t MCP41100_MOSI_PIN = 4;
+const uint8_t MCP41100_SCK_PIN  = 5;
+PioneerSWC swc(MCP41100_CS_PIN, MCP41100_SCK_PIN, MCP41100_MOSI_PIN);
 
-void setResistance(byte address, uint32_t targetOhms);
-void digitalPotWrite(byte value, byte address);
 void sendSWCPressToPioneer(__u8 key);
 void sendUnpressToPioneer();
 
@@ -46,14 +43,8 @@ void setup() {
   mcp2515.setBitrate(CAN_33KBPS);
   mcp2515.setNormalMode();
 
-  // Setup up MCP42100
-  pinMode(MCP42100_CS_PIN, OUTPUT);
-  pinMode(MCP42100_MOSI_PIN, OUTPUT);
-  pinMode(MCP42100_SCK_PIN, OUTPUT);
-  digitalWrite(MCP42100_CS_PIN, HIGH);
-  digitalWrite(MCP42100_SCK_PIN, LOW); // SPI Mode 0: SCK начинается с LOW
-
-  sendUnpressToPioneer(); // Start with unpressed state
+  swc.begin();
+  swc.release();
 
   Serial.println("------- CAN Read ----------");
   Serial.println("ID  DLC   DATA");
@@ -151,99 +142,60 @@ void loop() {
 }
 
 void sendSWCPressToPioneer(__u8 key) {
-  uint32_t resistance = 100000; // Default high impedance (~100kΩ)
-
   switch (key) {
     case 0x01: // Vol Up
-      resistance = 2100; // ~2.1kΩ
-      Serial.println("Emulate: Vol Up");
+      Serial.println("Ignore Vol Up key (0x01) from SWC, Pioneer does not need it");
+      // swc.press(SWCCommand::VolUp);
+      // Serial.println("Emulate: Vol Up");
       break;
 
     case 0x02: // Vol Down
-      resistance = 3100; // ~3.1kΩ
-      Serial.println("Emulate: Vol Down");
+      Serial.println("Ignore Vol Down key (0x02) from SWC, Pioneer does not need it");
+      // swc.press(SWCCommand::VolDown);
+      // Serial.println("Emulate: Vol Down");
       break;
 
     case 0x03: // Next
     case 0x13: // CD400 Next
-      resistance = 740; // ~0.74kΩ
+      swc.press(SWCCommand::Next);
       Serial.println("Emulate: Next Track");
       break;
 
     case 0x04: // Prev
     case 0x19: // CD400 Prev
-      resistance = 1300; // ~1.3kΩ
+      swc.press(SWCCommand::Prev);
       Serial.println("Emulate: Prev Track");
       break;
 
-    // case 0x05: // SRC
-    //   resistance = 270; // ~270Ω
-    //   Serial.println("Emulate: Source");
-    //   break;
+    case 0x05: // SRC
+      Serial.println("Ignore SRC key (0x05) from SWC, Pioneer does not need it");
+      // swc.press(SWCCommand::Source);
+      // Serial.println("Emulate: Source");
+      break;
 
     case 0x06: // Phone Up / Voice
-      resistance = 4600; // ~4.6kΩ
-      Serial.println("Emulate: Voice");
+      swc.press(SWCCommand::DisplayOff);
+      Serial.println("Emulate: Phone Up / Voice as Display Off");
       break;
 
     case 0x18: // CD400 Play/Pause
-      resistance = 4600; // ~4.6kΩ @TODO: find Play/Pause value
-      Serial.println("Emulate: CD400 Play/Pause");
+      swc.press(SWCCommand::Mute);
+      Serial.println("Emulate: CD400 Play/Pause as Mute");
       break;
 
-    // case 0x07: // Mute
-    //   resistance = 8600; // ~8.6kΩ
-    //   Serial.println("Emulate: Mute / Phone Down");
-    //   break;
+    case 0x07: // Mute
+      Serial.println("Ignore Mute key (0x07) from SWC, Pioneer does not support it");
+      // swc.press(SWCCommand::Mute);
+      // Serial.println("Emulate: Mute / Phone Down");
+      break;
 
     default:
       Serial.println("Unknown key, no action");
       return;
   }
-  setResistance(addressPot0, resistance);
 }
 
 void sendUnpressToPioneer() {
   Serial.println("Pioneer: emulate unpress");
-  uint32_t resistance = 100000; // ~100kΩ (high impedance)
-  setResistance(addressPot0and1, resistance);
-  setResistance(addressPot0, resistance);
-  setResistance(addressPot1, resistance);
-}
-
-void setResistance(byte address, uint32_t targetOhms) {
-  const uint32_t maxOhms = 100000; // For MCP42100 (100k)
-  const int steps = 255;      // 8-bit resolution
-
-  int position = constrain((long)targetOhms * steps / maxOhms, 0, 255);
-
-  digitalPotWrite(position, address);
-
-  Serial.print("Resistance set to ~");
-  Serial.print((long)position * maxOhms / steps);
-  Serial.println(" ohms");
-}
-
-
-void spiTransfer(byte value);
-// MCP42100 SPI transfer function
-void digitalPotWrite(byte value, byte address)
-{
-  Serial.print("Writing value: ");
-  Serial.print(value);
-  Serial.print(" to address: ");
-  Serial.println(address);
-  digitalWrite(MCP42100_CS_PIN, LOW); //Set Chip Active
-  spiTransfer(address);
-  spiTransfer(value);
-  digitalWrite(MCP42100_CS_PIN, HIGH); //Set Chip Inactive
-}
-
-void spiTransfer(byte value) {
-  for (int i = 7; i >= 0; i--) {
-    digitalWrite(MCP42100_MOSI_PIN, (value >> i) & 0x01); // Set bit
-    digitalWrite(MCP42100_SCK_PIN, HIGH);                // Set clock high
-    delayMicroseconds(1);                       // Short delay
-    digitalWrite(MCP42100_SCK_PIN, LOW);                 // Set clock low
-  }
+  swc.release();
 }
