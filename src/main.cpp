@@ -174,8 +174,9 @@ void sendSWCPressToPioneer(__u8 key) {
       break;
 
     case 0x06: // Phone Up / Voice
-      swc.press(SWCCommand::DisplayOff);
-      Serial.println("Emulate: Phone Up / Voice as Display Off");
+      Serial.println("Ignore Phone Up / Voice key (0x06) from SWC, Pioneer does not support it");
+      // swc.press(SWCCommand::DisplayOff);
+      // Serial.println("Emulate: Phone Up / Voice as Display Off");
       break;
 
     case 0x18: // CD400 Play/Pause
