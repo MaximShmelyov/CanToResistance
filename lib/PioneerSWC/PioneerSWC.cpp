@@ -52,7 +52,7 @@ uint8_t PioneerSWC::getValueForCommand(SWCCommand command) {
     case SWCCommand::Prev:       return 24; // 20 - 28
     case SWCCommand::VolUp:      return 35; // 29 - 41
     case SWCCommand::VolDown:    return 52; // 42 - 65
-    case SWCCommand::None:       return 0;
+    case SWCCommand::None:       return 255;
   }
   return 0;
 }
