@@ -19,6 +19,9 @@ const uint8_t INT_PIN = A0;
 // SWC and Media Source states
 bool swcPressed = false;
 __u8 mediaSource = 0x00;
+bool muteHeld = false;
+unsigned long mutePressTime = 0;
+#define MUTE_HOLD_TIME 2000 // 2 seconds
 
 // Initialize MCP2515 CAN controller
 MCP2515 mcp2515(MCP2515_SPI_CS_PIN);
@@ -93,6 +96,7 @@ void loop() {
       if (prevMediaSource == SOURCE_AUX && mediaSource != SOURCE_AUX && swcPressed) {
         Serial.println("Source changed. Forcing SWC release.");
         swcPressed = false;
+        muteHeld = false;
         sendUnpressToPioneer(); // emulate unpress
       }
     }
@@ -108,15 +112,34 @@ void loop() {
         if (swcPressed) {
           Serial.println("SWC released (Unpress All)");
           swcPressed = false;
+
+          if (muteHeld) {
+            muteHeld = false;
+            Serial.println("Mute hold cancelled");
+          }
+
           sendUnpressToPioneer();
         }
       }
       // Press when AUX is active
       else if (mediaSource == SOURCE_AUX) {
         swcPressed = true;
-        Serial.print("SWC Key pressed: ");
-        Serial.println(key, HEX);
-        sendSWCPressToPioneer(key);
+
+        if (key == 0x07) { // Mute button hold logic
+          if (!muteHeld) {
+            mutePressTime = millis();
+            muteHeld = true;
+          } else if (millis() - mutePressTime >= MUTE_HOLD_TIME) {
+            swc.press(SWCCommand::DisplayOff);
+            Serial.println("Mute held for 2s: Emulate Display Off");
+            muteHeld = false;
+          }
+        } else {
+          muteHeld = false;
+          Serial.print("SWC Key pressed: ");
+          Serial.println(key, HEX);
+          sendSWCPressToPioneer(key);
+        }
       }
     }
 
