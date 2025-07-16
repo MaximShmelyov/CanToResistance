@@ -3,6 +3,9 @@
 #include <mcp2515.h>
 #include "PioneerSWC.h"
 
+#define WAIT_FOR_SERIAL false
+#define DEBUG_PRINT_TO_SERIAL true
+
 struct can_frame canMsg;
 
 // CAN bus addresses
@@ -35,9 +38,20 @@ PioneerSWC swc(MCP41100_CS_PIN, MCP41100_SCK_PIN, MCP41100_MOSI_PIN);
 void sendSWCPressToPioneer(__u8 key);
 void sendUnpressToPioneer();
 
+void debugPrint(const char* message, bool newline = false) {
+  if (DEBUG_PRINT_TO_SERIAL) {
+    if (newline) {
+      Serial.println(message);
+    }
+    else {
+      Serial.print(message);
+    }
+  }
+}
+
 void setup() {
   Serial.begin(115200);
-  while (!Serial) {
+  while (WAIT_FOR_SERIAL && !Serial) {
     delay(1000);
     // Serial.println("Waiting for Serial...");
   }
@@ -49,8 +63,8 @@ void setup() {
   swc.begin();
   swc.release();
 
-  Serial.println("------- CAN Read ----------");
-  Serial.println("ID  DLC   DATA");
+  debugPrint("------- CAN Read ----------", true);
+  debugPrint("ID  DLC   DATA", true);
 }
 
 void loop() {
@@ -89,12 +103,14 @@ void loop() {
     if ((id & CD400_ADDR) == CD400_ADDR && canMsg.data[0] == SOURCE_CHANGED_ID && canMsg.data[1] == 0x12) {
       __u8 prevMediaSource = mediaSource;
       mediaSource = canMsg.data[2];
-      Serial.print("Source: ");
-      Serial.println(mediaSource, HEX);
+      if (DEBUG_PRINT_TO_SERIAL) {
+        Serial.print("Source: ");
+        Serial.println(mediaSource, HEX);
+      }
 
       // If the source changed from AUX to something else, release SWC
       if (prevMediaSource == SOURCE_AUX && mediaSource != SOURCE_AUX && swcPressed) {
-        Serial.println("Source changed. Forcing SWC release.");
+        debugPrint("Source changed. Forcing SWC release.", true);
         swcPressed = false;
         muteHeld = false;
         sendUnpressToPioneer(); // emulate unpress
@@ -110,12 +126,12 @@ void loop() {
       if (key == 0x00) {
         // Release is always processed
         if (swcPressed) {
-          Serial.println("SWC released (Unpress All)");
+          debugPrint("SWC released (Unpress All)", true);
           swcPressed = false;
 
           if (muteHeld) {
             muteHeld = false;
-            Serial.println("Mute hold cancelled");
+            debugPrint("Mute hold cancelled", true);
           }
 
           sendUnpressToPioneer();
@@ -131,13 +147,15 @@ void loop() {
             muteHeld = true;
           } else if (millis() - mutePressTime >= MUTE_HOLD_TIME) {
             swc.press(SWCCommand::DisplayOff);
-            Serial.println("Mute held for 2s: Emulate Display Off");
+            debugPrint("Mute held for 2s: Emulate Display Off", true);
             muteHeld = false;
           }
         } else {
           muteHeld = false;
-          Serial.print("SWC Key pressed: ");
-          Serial.println(key, HEX);
+          if (DEBUG_PRINT_TO_SERIAL) {
+            Serial.print("SWC Key pressed: ");
+            Serial.println(key, HEX);
+          }
           sendSWCPressToPioneer(key);
         }
       }
@@ -149,14 +167,16 @@ void loop() {
 
       // Press
       if (state == 0x00) {
-        Serial.print("CD400 Panel Key: ");
-        Serial.println(key, HEX);
+        if (DEBUG_PRINT_TO_SERIAL) {
+          Serial.print("CD400 Panel Key: ");
+          Serial.println(key, HEX);
+        }
         sendSWCPressToPioneer(key);
         swcPressed = true;
       } 
       // Release
       else /*if (state == 0x01 || state == 0x02)*/ {
-        Serial.println("CD400 Panel Key released");
+        debugPrint("CD400 Panel Key released", true);
         sendUnpressToPioneer();
         swcPressed = false;
       }
@@ -167,13 +187,13 @@ void loop() {
 void sendSWCPressToPioneer(__u8 key) {
   switch (key) {
     case 0x01: // Vol Up
-      Serial.println("Ignore Vol Up key (0x01) from SWC, Pioneer does not need it");
+      debugPrint("Ignore Vol Up key (0x01) from SWC, Pioneer does not need it", true);
       // swc.press(SWCCommand::VolUp);
       // Serial.println("Emulate: Vol Up");
       break;
 
     case 0x02: // Vol Down
-      Serial.println("Ignore Vol Down key (0x02) from SWC, Pioneer does not need it");
+      debugPrint("Ignore Vol Down key (0x02) from SWC, Pioneer does not need it", true);
       // swc.press(SWCCommand::VolDown);
       // Serial.println("Emulate: Vol Down");
       break;
@@ -181,45 +201,45 @@ void sendSWCPressToPioneer(__u8 key) {
     case 0x03: // Next
     case 0x13: // CD400 Next
       swc.press(SWCCommand::Next);
-      Serial.println("Emulate: Next Track");
+      debugPrint("Emulate: Next Track", true);
       break;
 
     case 0x04: // Prev
     case 0x19: // CD400 Prev
       swc.press(SWCCommand::Prev);
-      Serial.println("Emulate: Prev Track");
+      debugPrint("Emulate: Prev Track", true);
       break;
 
     case 0x05: // SRC
-      Serial.println("Ignore SRC key (0x05) from SWC, Pioneer does not need it");
+      debugPrint("Ignore SRC key (0x05) from SWC, Pioneer does not need it", true);
       // swc.press(SWCCommand::Source);
       // Serial.println("Emulate: Source");
       break;
 
     case 0x06: // Phone Up / Voice
-      Serial.println("Ignore Phone Up / Voice key (0x06) from SWC, Pioneer does not support it");
+      debugPrint("Ignore Phone Up / Voice key (0x06) from SWC, Pioneer does not support it", true);
       // swc.press(SWCCommand::DisplayOff);
       // Serial.println("Emulate: Phone Up / Voice as Display Off");
       break;
 
     case 0x18: // CD400 Play/Pause
       swc.press(SWCCommand::Mute);
-      Serial.println("Emulate: CD400 Play/Pause as Mute");
+      debugPrint("Emulate: CD400 Play/Pause as Mute", true);
       break;
 
     case 0x07: // Mute
-      Serial.println("Ignore Mute key (0x07) from SWC, Pioneer does not support it");
+      debugPrint("Ignore Mute key (0x07) from SWC, Pioneer does not support it", true);
       // swc.press(SWCCommand::Mute);
       // Serial.println("Emulate: Mute / Phone Down");
       break;
 
     default:
-      Serial.println("Unknown key, no action");
+      debugPrint("Unknown key, no action", true);
       return;
   }
 }
 
 void sendUnpressToPioneer() {
-  Serial.println("Pioneer: emulate unpress");
+  debugPrint("Pioneer: emulate unpress", true);
   swc.release();
 }

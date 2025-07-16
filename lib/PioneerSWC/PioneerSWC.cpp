@@ -1,5 +1,7 @@
 #include "PioneerSWC.h"
 
+#define DEBUG_SWC_PRINT_TO_SERIAL false
+
 PioneerSWC::PioneerSWC(uint8_t csPin, uint8_t sckPin, uint8_t mosiPin) {
   _csPin = csPin;
   _sckPin = sckPin;
@@ -8,7 +10,9 @@ PioneerSWC::PioneerSWC(uint8_t csPin, uint8_t sckPin, uint8_t mosiPin) {
 }
 
 void PioneerSWC::begin() {
-  Serial.println("PioneerSWC::begin()");
+  if (DEBUG_SWC_PRINT_TO_SERIAL) {
+    Serial.println("PioneerSWC::begin()");
+  }
   pinMode(_csPin, OUTPUT);
   pinMode(_mosiPin, OUTPUT);
   pinMode(_sckPin, OUTPUT);
@@ -19,9 +23,11 @@ void PioneerSWC::begin() {
 }
 
 void PioneerSWC::setPot(uint8_t value) {
-  Serial.print("PioneerSWC::setPot(value=");
-  Serial.print(value);
-  Serial.println(")");
+  if (DEBUG_SWC_PRINT_TO_SERIAL) {
+    Serial.print("PioneerSWC::setPot(value=");
+    Serial.print(value, HEX);
+    Serial.println(")");
+  }
   digitalWrite(_csPin, LOW);
   spiTransfer(0b00010001);
   if (_invertValue) {
@@ -32,9 +38,11 @@ void PioneerSWC::setPot(uint8_t value) {
 }
 
 void PioneerSWC::spiTransfer(uint8_t value) {
-  Serial.print("PioneerSWC::spiTransfer(value=");
-  Serial.print(value, HEX);
-  Serial.println(")");
+  if (DEBUG_SWC_PRINT_TO_SERIAL) {
+    Serial.print("PioneerSWC::spiTransfer(value=");
+    Serial.print(value, HEX);
+    Serial.println(")");
+  }
   for (int i = 7; i >= 0; i--) {
     digitalWrite(_mosiPin, (value >> i) & 0x01);
     digitalWrite(_sckPin, HIGH);
@@ -58,14 +66,18 @@ uint8_t PioneerSWC::getValueForCommand(SWCCommand command) {
 }
 
 void PioneerSWC::press(SWCCommand command) {
-  Serial.print("PioneerSWC::press(command=");
-  Serial.print(static_cast<int>(command));
-  Serial.println(")");
+  if (DEBUG_SWC_PRINT_TO_SERIAL) {
+    Serial.print("PioneerSWC::press(command=");
+    Serial.print(static_cast<int>(command));
+    Serial.println(")");
+  }
   uint8_t value = getValueForCommand(command);
   setPot(value);
 }
 
 void PioneerSWC::release() {
-  Serial.print("PioneerSWC::release()");
+  if (DEBUG_SWC_PRINT_TO_SERIAL) {
+    Serial.println("PioneerSWC::release()");
+  }
   setPot(255);
 }
